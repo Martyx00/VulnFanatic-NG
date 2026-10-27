@@ -137,6 +137,11 @@ def _entry_function_starts(bv) -> set:
 # --------------------------------------------------------------------------- #
 
 def _linear_hlil_text(func) -> str:
+    # The language-representation linear view does not generate IL itself: if HLIL
+    # isn't cached yet it renders the prototype plus a "Loading..." placeholder and
+    # queues generation asynchronously. Force synchronous HLIL generation first.
+    if _safe(lambda: func.hlil) is None:
+        return ""
     settings = DisassemblySettings()
     _safe(lambda: settings.set_option(DisassemblyOption.ShowVariableTypesWhenAssigned, True))
     obj = LinearViewObject.single_function_language_representation(func, settings)
@@ -152,6 +157,11 @@ def _linear_hlil_text(func) -> str:
         if not _safe(lambda: cursor.next(), False):
             break
     return "\n".join(lines)
+
+
+def _is_placeholder_text(text: str) -> bool:
+    """True if the linear view only produced BN's async "Loading..." placeholder."""
+    return any(ln.strip() == "Loading..." for ln in text.splitlines())
 
 
 def _disassembly_text(func) -> str:
@@ -171,7 +181,7 @@ def decompile_text(func):
     """Return ``(text, representation)`` using the best available representation."""
     if _HAVE_BN:
         text = _safe(lambda: _linear_hlil_text(func))
-        if text and text.strip():
+        if text and text.strip() and not _is_placeholder_text(text):
             return text, "hlil"
         hl = _safe(lambda: func.hlil)
         if hl is not None:
